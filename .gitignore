@@ -1,0 +1,9 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Runtime artifacts produced by the scripts
+figures/
+results/
+data/
+*.h5ad

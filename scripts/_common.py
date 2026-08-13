@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""
+Shared helpers for the dynamo script toolkit.
+
+Every CLI script in this directory imports from this module so that data
+loading, saving, figure configuration, modality detection, and logging behave
+consistently. This file is NOT a CLI itself; import it:
+
+    from _common import load_adata, save_adata, configure_dynamo, info, detect_modality
+"""
+
+import os
+import sys
+
+
+def info(msg):
+    """Print a progress message with a marker."""
+    print(f"[dynamo] {msg}", flush=True)
+
+
+def die(msg, code=1):
+    """Print an error and exit."""
+    print(f"Error: {msg}", file=sys.stderr, flush=True)
+    sys.exit(code)
+
+
+def _import_dynamo():
+    try:
+        import dynamo as dyn  # noqa: F401
+        return dyn
+    except ImportError:
+        die("dynamo not installed. Activate the venv noted in SKILL.md, "
+            "or install with: pip install dynamo-release")
+
+
+def configure_dynamo(figdir="figures", dpi=120, background="white"):
+    """Apply consistent dynamo/matplotlib settings and return the dynamo module.
+
+    dynamo has no global figure directory (unlike scanpy). The scripts save
+    figures explicitly with ``save_fig`` below, so this only sets the
+    non-interactive backend, figure style, and creates ``figdir``.
+    """
+    import matplotlib
+    matplotlib.use("Agg")  # headless: never try to open a window
+    dyn = _import_dynamo()
+    try:
+        dyn.configuration.set_figure_params("dynamo", background=background, dpi=dpi)
+    except Exception:  # keep going even if the style call changes across versions
+        pass
+    os.makedirs(figdir, exist_ok=True)
+    return dyn
+
+
+def save_fig(path, dpi=150):
+    """Save the current matplotlib figure to ``path`` and close it.
+
+    dynamo plotting functions draw onto the current figure when called with
+    ``save_show_or_return="return"``; this captures that figure to disk with a
+    predictable filename instead of using each function's bespoke save logic.
+    """
+    import matplotlib.pyplot as plt
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
+    plt.savefig(path, dpi=dpi, bbox_inches="tight")
+    plt.close("all")
+    info(f"Wrote figure {path}")
+
+
+def load_adata(path):
+    """Load an AnnData object, dispatching on the file extension.
+
+      * ``.h5ad``          -> dyn.read_h5ad
+      * ``.loom``          -> dyn.read_loom
+      * anything else      -> dyn.read (delegates to anndata)
+    """
+    dyn = _import_dynamo()
+    if not os.path.exists(path):
+        die(f"input not found: {path}")
+    lower = path.lower()
+    if lower.endswith(".h5ad"):
+        return dyn.read_h5ad(path)
+    if lower.endswith(".loom"):
+        return dyn.read_loom(path)
+    return dyn.read(path)
+
+
+def save_adata(adata, path):
+    """Write an AnnData object to .h5ad, creating parent dirs as needed."""
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
+    adata.write_h5ad(path)
+    info(f"Wrote {path}  ({adata.n_obs} cells x {adata.n_vars} genes)")
+
+
+# ---- dynamo-specific helpers -------------------------------------------------
+
+# Layers that identify each data modality. Splicing-based velocity needs
+# spliced/unspliced counts; metabolic-labeling velocity needs new (labeled) and
+# total counts (scNT-seq, scEU-seq, scSLAM-seq, ...).
+_SPLICING_LAYERS = ("spliced", "unspliced")
+_LABELING_LAYERS = ("new", "total")
+
+
+def _named_layers(adata):
+    return [k for k in adata.layers.keys() if isinstance(k, str)]
+
+
+def detect_modality(adata):
+    """Return 'labeling', 'splicing', or 'unknown' from the layers present.
+
+    Labeling takes precedence when both label and splice layers exist, because
+    the labeling kinetics model is the more informative one for such data.
+    """
+    layers = set(_named_layers(adata))
+    has_label = all(k in layers for k in _LABELING_LAYERS)
+    has_splice = all(k in layers for k in _SPLICING_LAYERS)
+    if has_label:
+        return "labeling"
+    if has_splice:
+        return "splicing"
+    return "unknown"
+
+
+def resolve_modality(adata, requested):
+    """Turn a --modality flag ('auto'/'splicing'/'labeling') into a concrete one."""
+    if requested and requested != "auto":
+        return requested
+    modality = detect_modality(adata)
+    if modality == "unknown":
+        die("could not detect modality: need spliced/unspliced (splicing) or "
+            "new/total (labeling) layers. Pass --modality explicitly and add the "
+            "required layers first.")
+    info(f"Auto-detected modality: {modality}")
+    return modality
+
+
+def select_cells(adata, explicit=None, group=None, role="init"):
+    """Resolve a set of cell names from an explicit list or an 'obs_col:value' group.
+
+    Used by the fate / least-action scripts to pick starting and target cells.
+    """
+    if explicit:
+        return list(explicit)
+    if group:
+        if ":" not in group:
+            die(f"--{role}-group must be 'column:value' (e.g. cell_type:HSC)")
+        col, val = group.split(":", 1)
+        if col not in adata.obs.columns:
+            die(f"obs column '{col}' not found (for --{role}-group)")
+        cells = list(adata.obs_names[adata.obs[col].astype(str) == val])
+        if not cells:
+            die(f"no cells with obs['{col}'] == '{val}' (for --{role}-group)")
+        info(f"[{role}] {len(cells)} cells from {col}=={val}")
+        return cells
+    die(f"provide --{role}-cells or --{role}-group")
+
+
+def has_vectorfield(adata, basis=None):
+    """Whether a reconstructed vector field is present (optionally for a basis)."""
+    key = "VecFld" if basis is None else f"VecFld_{basis}"
+    return key in adata.uns
+
+
+def add_io_args(parser, default_output=None):
+    """Attach the standard input/output/figdir arguments to an argparse parser."""
+    parser.add_argument("input", help="Input .h5ad (or .loom / other anndata-readable file)")
+    parser.add_argument("-o", "--output", default=default_output,
+                        help="Output .h5ad path" +
+                             (f" (default: {default_output})" if default_output else ""))
+    parser.add_argument("--figdir", default="figures",
+                        help="Directory for saved figures (default: figures)")
+    return parser

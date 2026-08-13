@@ -1,0 +1,16 @@
+{
+  "modality": "auto",
+  "recipe": "monocle",
+  "n_top_genes": 2000,
+  "tkey": null,
+  "experiment_type": null,
+  "no_cell_cycle": false,
+  "model": "stochastic",
+  "est_method": "auto",
+  "group": null,
+  "cores": 4,
+  "reduction": "umap",
+  "basis": "umap",
+  "map_topography": true,
+  "diff_geometry": false
+}
