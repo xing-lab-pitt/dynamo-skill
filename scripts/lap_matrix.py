@@ -54,6 +54,23 @@ def pick_adj_key(adata, explicit=None):
         "Run reduce_dimensions.py (cell_velocities) first.")
 
 
+def capture_path(adata, key):
+    """Path geometry for one solved LAP: {'prediction': [...], 'action': [...]}.
+
+    dyn.pd.least_action stores these under uns[key]; the action matrix only ever
+    reads the final scalar, so without this the geometry is computed and thrown
+    away. Coerced to plain numpy so the pickle does not depend on dynamo.
+    """
+    u = adata.uns.get(key, {})
+    if not isinstance(u, dict) or "prediction" not in u:
+        return None
+    preds = [np.asarray(p, dtype=float) for p in u["prediction"]]
+    acts = [np.asarray(a, dtype=float).ravel() for a in u.get("action", [])]
+    if len(acts) < len(preds):  # pad so zip() below never truncates silently
+        acts += [np.zeros(len(p)) for p in preds[len(acts):]]
+    return {"prediction": preds, "action": acts}
+
+
 def final_action(adata, lap_obj, key):
     """Final action of a LAP: from uns if dynamo stored it, else from the object."""
     u = adata.uns.get(key, {})
@@ -90,6 +107,11 @@ def main():
     p.add_argument("--min-cells", type=int, default=50,
                    help="Warn when a group has fewer cells than this (default: 50)")
     p.add_argument("--out-dir", default="results/lap", help="CSV output directory")
+    p.add_argument("--save-paths", default=None, metavar="PATH.pkl",
+                   help="Also persist each pair's path geometry (coordinates + "
+                        "per-point action). Without this only the scalar action "
+                        "survives and the paths — the expensive part — are "
+                        "discarded. Feed the file to `plot.py --kind lap_paths`.")
     args = p.parse_args()
 
     dyn = configure_dynamo(figdir=args.figdir)
@@ -127,6 +149,7 @@ def main():
 
     M = pd.DataFrame(np.nan, index=groups, columns=groups, dtype=float)
     failures = []
+    saved_paths = {}
     for src in groups:
         for tgt in groups:
             if src == tgt:
@@ -141,8 +164,19 @@ def main():
                 if isinstance(lap, list):
                     lap = lap[0]
                 M.loc[src, tgt] = final_action(adata, lap, key)
+                if args.save_paths:
+                    rec = capture_path(adata, key)
+                    if rec:
+                        saved_paths[f"{src}->{tgt}"] = rec
             except Exception as e:  # one bad pair must not lose the whole matrix
                 failures.append((src, tgt, type(e).__name__, str(e)[:120]))
+
+    if args.save_paths:
+        import pickle
+        os.makedirs(os.path.dirname(os.path.abspath(args.save_paths)) or ".", exist_ok=True)
+        with open(args.save_paths, "wb") as fh:
+            pickle.dump(saved_paths, fh)
+        info(f"[lap_matrix] saved {len(saved_paths)} path(s) -> {args.save_paths}")
 
     os.makedirs(args.out_dir, exist_ok=True)
     M.to_csv(os.path.join(args.out_dir, "lap_action_matrix.csv"))

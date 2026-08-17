@@ -15,9 +15,12 @@ All figures come from `plot.py` (one `--kind` per call, saved to `--figdir` as
 | `acceleration` | `differential_geometry.py` | scalar field on the embedding |
 | `curvature` | `differential_geometry.py` | scalar field |
 | `divergence` | `differential_geometry.py` | sources (+) / sinks (−) |
-| `jacobian` | Jacobian computed | interaction field |
+| `jacobian` | Jacobian computed | interaction field; pass `--genes` for a named regulator→effector pair, omit for the overall field |
+| `jacobian_heatmap` | Jacobian + `--genes` | pairwise regulator × effector matrix |
 | `speed` | `dyn.tl.speed(adata, basis=)` first | otherwise raises "speed_… not in .obs" |
-| `topography` | `vector_field.py --map-topography` | streamlines + fixed points; without fixed points it raises "'x' values must be equally spaced" |
+| `topography` | `vector_field.py --map-topography` | streamlines + fixed points; without fixed points it raises "'x' values must be equally spaced". Curate them with `topography.py --list/--keep` |
+| `scalar_by_group` | any per-cell scalar in `obs` + `--scalar --group` | violin+box of the scalar per group, sorted by median; `--palette` takes JSON |
+| `lap_paths` | `lap_matrix.py --save-paths` + `--paths --pairs` | least-action paths overlaid on the field, colored by action |
 | `kinetic_heatmap` | dynamics + `--genes` | expression kinetics ordered along the field |
 
 ```bash
@@ -25,7 +28,19 @@ python plot.py vf.h5ad  --kind streamline   --color cell_type
 python plot.py dg.h5ad  --kind acceleration --basis umap
 python plot.py dyn.h5ad --kind phase        --genes GATA1 KLF1
 python plot.py vf.h5ad  --kind topography   --color cell_type   # build field with --map-topography
+python plot.py dg.h5ad  --kind scalar_by_group --scalar speed_pca --group cell_type
+python plot.py vf.h5ad  --kind lap_paths --paths results/lap/laps.pkl \
+    --pairs "HSC->Meg" "HSC->Ery" --out-name lap_development
 ```
+
+**Embedding vs. group plots.** Painting a scalar on the embedding shows *where*
+it is high; it cannot support a claim like "Meg is the fastest cell type". That
+comparison needs `scalar_by_group`, which prints the per-group medians alongside
+the figure so the ordering is stated, not eyeballed.
+
+**`--out-name`.** One `--kind` can produce several figures (three groupings of
+`lap_paths`, several scalars). Without `--out-name` they all save to
+`<kind>.png` and overwrite each other.
 
 ## Common direct calls (beyond plot.py)
 ```python

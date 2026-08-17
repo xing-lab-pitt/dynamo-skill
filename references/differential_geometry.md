@@ -63,8 +63,43 @@ dyn.vf.rank_acceleration_genes(adata)               # -> uns['rank_acceleration'
 dyn.vf.rank_curvature_genes(adata)                  # -> uns['rank_curvature']
 ```
 
+## Graph potential / vector-field pseudotime — `--quantities potential`
+
+Unlike the others, `potential` is not a derivative of the field in a basis. It
+comes from a Hodge decomposition of a **cell-cell transition matrix in `obsp`**,
+and yields dynamo's vector-field pseudotime.
+
+```bash
+python differential_geometry.py vf.h5ad -o dg.h5ad --quantities potential \
+    --transition-key cosine_transition_matrix
+python differential_geometry.py dg.h5ad -o dg.h5ad --quantities potential \
+    --transition-key fp_transition_rate
+```
+
+Writes `obs['potential_<key>']` and `obs['pseudotime_<key>']` (= −potential).
+Underlying calls:
+
+```python
+from dynamo.tools.graph_operators import build_graph, div, potential
+g = build_graph(adata.obsp[key]); pot = potential(g, -div(g))
+```
+
+**The sign of `div` depends on the matrix.** dynamo's own tutorials use
+`potential(g, -div(g))` for a cosine transition matrix but `potential(g, +div(g))`
+for `fp_transition_rate`. Getting it backwards silently inverts pseudotime — an
+error that looks like a biological result rather than a bug. `--potential-sign
+auto` (default) picks `pos` for `fp_transition*` keys and `neg` otherwise, and
+logs the choice; override with `--potential-sign neg|pos`.
+
+Sanity check: the progenitor population should sit at **low** potential / early
+pseudotime. If it doesn't, suspect the sign before believing the biology.
+
 ## Visualize
 ```bash
 python plot.py dg.h5ad --kind acceleration --basis umap
-python plot.py dg.h5ad --kind jacobian --genes GATA1 KLF1
+python plot.py dg.h5ad --kind jacobian --genes GATA1 KLF1          # one regulator->effector
+python plot.py dg.h5ad --kind jacobian_heatmap --genes GATA1 KLF1 SPI1  # pairwise matrix
+python plot.py dg.h5ad --kind umap --color potential_cosine_transition_matrix
+# compare a scalar ACROSS groups — an embedding plot cannot answer "which is highest?"
+python plot.py dg.h5ad --kind scalar_by_group --scalar speed_pca --group cell_type
 ```

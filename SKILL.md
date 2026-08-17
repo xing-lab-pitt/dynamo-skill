@@ -53,18 +53,33 @@ config, modality detection) — keep it alongside the others and run from the
 
 | Script | Purpose | Typical call |
 |--------|---------|--------------|
+| `sample_data.py` | Fetch a **bundled published dataset** (`dyn.sample_data`) — most tutorials start from a processed object rather than re-deriving one | `python sample_data.py --list` · `python sample_data.py --dataset hematopoiesis -o hsc.h5ad` |
 | `run_pipeline.py` | **Full core workflow in one command**: load → preprocess → dynamics → reduceDimension → cell_velocities → VectorField (+ optional diff-geometry) | `python run_pipeline.py raw.h5ad -o vf.h5ad` |
 | `inspect_data.py` | Summarize a dataset: shape, **detected modality**, layers, and which dynamo steps already ran | `python inspect_data.py data.h5ad` |
 | `preprocess.py` | QC + gene selection + normalize + PCA via `dyn.pp.Preprocessor` (recipe-based; handles labeling with `--tkey`) | `python preprocess.py raw.h5ad -o pp.h5ad` |
 | `dynamics.py` | Kinetics + RNA velocity (`dyn.tl.dynamics`); `--tkey` enables the labeling kinetic model | `python dynamics.py pp.h5ad -o dyn.h5ad --model stochastic` |
 | `reduce_dimensions.py` | Embedding (`reduceDimension`) + project velocity onto it (`cell_velocities`) | `python reduce_dimensions.py dyn.h5ad -o red.h5ad` |
 | `vector_field.py` | Reconstruct the continuous field (`dyn.vf.VectorField`); `--map-topography` for fixed points | `python vector_field.py red.h5ad -o vf.h5ad --basis umap` |
-| `differential_geometry.py` | Jacobian/acceleration/curvature/divergence + **ranked regulatory-gene CSVs** | `python differential_geometry.py vf.h5ad -o dg.h5ad --basis pca` |
+| `topography.py` | **Inspect and curate fixed points**: `--list` what was detected, `--keep` the real ones. Raw topography over-detects, so every published figure is curated | `python topography.py vf.h5ad --basis umap --n 750 --list` |
+| `differential_geometry.py` | Jacobian/acceleration/curvature/divergence/**graph potential** + **ranked regulatory-gene CSVs** | `python differential_geometry.py vf.h5ad -o dg.h5ad --basis pca` |
 | `fate.py` | Cell-fate prediction (`dyn.pd.fate`) from init cells + streamline/topography plots | `python fate.py vf.h5ad -o fate.h5ad --init-group cell_type:HSC` |
 | `least_action.py` | Least-action path between two states (`dyn.pd.least_action`) | `python least_action.py vf.h5ad -o lap.h5ad --init-group cell_type:HSC --target-group cell_type:Meg` |
-| `lap_matrix.py` | **Action matrix over ALL ordered pairs** of states + forward-vs-reverse table: which conversions are hard | `python lap_matrix.py vf_pca.h5ad -o lap.h5ad --group-col cell_type --source HSC --targets Meg Ery` |
+| `lap_matrix.py` | **Action matrix over ALL ordered pairs** of states + forward-vs-reverse table: which conversions are hard. `--save-paths` also keeps the path geometry for plotting | `python lap_matrix.py vf_pca.h5ad -o lap.h5ad --group-col cell_type --source HSC --targets Meg Ery` |
 | `perturbation.py` | In-silico perturbation / KO (`dyn.pd.perturbation`/`KO`) + ranked response | `python perturbation.py dg.h5ad -o pert.h5ad --genes GATA1 --expression 100` |
-| `plot.py` | Any standard figure: streamline/topography/phase/umap/kinetic_heatmap/scalar-field | `python plot.py vf.h5ad --kind streamline --color cell_type` |
+| `plot.py` | Any standard figure: streamline/topography/phase/umap/kinetic_heatmap/scalar-field, plus `scalar_by_group`, `jacobian_heatmap`, `lap_paths` | `python plot.py vf.h5ad --kind streamline --color cell_type` |
+
+**`plot.py --kind` cheat sheet for the less obvious ones:**
+
+```bash
+# compare a per-cell scalar ACROSS groups (painting it on the embedding cannot show this)
+python plot.py dg.h5ad --kind scalar_by_group --scalar speed_pca --group cell_type
+# a named regulator -> effector Jacobian, and the full pairwise matrix
+python plot.py dg.h5ad --kind jacobian         --genes SPI1 GATA1
+python plot.py dg.h5ad --kind jacobian_heatmap --genes SPI1 GATA1 KLF1 CEBPA
+# overlay least-action paths saved by lap_matrix.py --save-paths
+python plot.py vf.h5ad --kind lap_paths --paths results/lap/laps.pkl \
+    --pairs "HSC->Meg" "HSC->Ery" --out-name lap_development
+```
 
 ### One-shot end-to-end run
 

@@ -16,6 +16,10 @@ Dynamo uses short module aliases. `import dynamo as dyn`, then:
 - `adata.write_h5ad(path)` — save.
 - `dyn.sample_data.zebrafish()`, `.hematopoiesis()`, `.scNT_seq_neuron_labeling()`,
   `.scEU_seq_rpe1()`, `.scEU_seq_organoid()`, `.DentateGyrus()`, `.pancreatic_endocrinogenesis()`, ...
+  Use `sample_data.py --list` for the full set (23) and `--dataset NAME -o out.h5ad`
+  to fetch one. **Prefer the processed object over re-deriving**: `hematopoiesis()`
+  ships the published UMAP, velocity, `VecFld_umap`/`VecFld_pca` and Jacobians,
+  while `hematopoiesis_raw()` is the raw counts you would have to rebuild from.
 
 ## Preprocessing (`dyn.pp`)
 - `Preprocessor(cell_cycle_score_enable=...)` — pipeline object.

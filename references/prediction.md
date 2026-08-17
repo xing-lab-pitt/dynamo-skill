@@ -30,9 +30,15 @@ python least_action.py vf_pca.h5ad -o lap.h5ad \
 ```
 - Run in the **pca** basis.
 - **LAP solves one optimization per init cell**, so it is expensive on whole
-  populations. `--n-cells` (default **1**) caps each endpoint to the first N
-  selected cells — the canonical "representative cell → representative cell" LAP.
-  Raise it (e.g. `--n-cells 5`) or pass explicit `--init-cells`/`--target-cells`.
+  populations. `--n-cells` (default **1**) caps each endpoint — the canonical
+  "representative cell → representative cell" LAP. Raise it (e.g. `--n-cells 5`)
+  or pass explicit `--init-cells`/`--target-cells`.
+- **`--endpoint` picks which cell represents a group**: `centroid` (default,
+  closest to the group's centroid in the field's basis) or `first` (first in row
+  order, the pre-`--endpoint` behaviour). `first` makes the answer depend on row
+  ordering, which is why it is no longer the default. `lap_matrix.py` uses the
+  same `_common.representative_cell` helper, so a single LAP and the action
+  matrix refer to the same cells.
 - Output: `least_action_path.png`; the path + action stored in `uns['LAP_pca']`.
 - Genes along the path: `dyn.pd.GeneLeastActionPath` + `dyn.pl.kinetic_heatmap`.
 
@@ -64,6 +70,30 @@ python lap_matrix.py vf_pca.h5ad -o lap.h5ad --basis pca \
   the log for `FAILED` lines before reading the result as complete.
 - Low-n groups are flagged (`--min-cells`, default 50) — a terminal state with a
   handful of cells gives a weakly constrained path.
+
+### Keeping the paths, not just the actions — `--save-paths`
+
+By default the matrix keeps only the final action per pair and **discards the
+path geometry**, even though solving for it is the expensive part. `--save-paths`
+persists each pair's coordinates and per-point action so they can be re-plotted
+without re-solving:
+
+```bash
+python lap_matrix.py vf_umap.h5ad -o lapm.h5ad --basis umap \
+    --group-col cell_type --groups HSC Meg Ery Bas Mon Neu \
+    --save-paths results/lap/laps.pkl
+
+# then group them however you like — no re-optimization
+python plot.py vf_umap.h5ad --kind lap_paths --paths results/lap/laps.pkl \
+    --pairs "HSC->Meg" "HSC->Ery" "HSC->Bas" --out-name lap_development
+python plot.py vf_umap.h5ad --kind lap_paths --paths results/lap/laps.pkl \
+    --pairs-file transdiff_pairs.txt --out-name lap_transdifferentiation
+```
+
+Keys are `"<source>-><target>"`. Use the **umap** basis when the point is the
+figure (paths are drawn in the embedding's first two dimensions); use **pca**
+when the point is the action values. Paths are colored by action via
+`dynamo.plot.utils.map2color`, so a lighter path is a costlier transition.
 
 ---
 
