@@ -70,6 +70,10 @@ def main():
     if args.n is not None:
         info(f"[topography] detecting fixed points with n={args.n}, basis={args.basis}")
         dyn.vf.topography(adata, n=args.n, basis=args.basis)
+        # Stamp n at DETECTION time: the curation pass usually runs against the
+        # cached object and never sees --n, so recording it only there would lose
+        # the one number the kept indices are meaningless without.
+        adata.uns[f"VecFld_{args.basis}"]["topography_n"] = int(args.n)
 
     Xss, ftype = fixed_points(adata, args.basis)
     info(f"[topography] {len(ftype)} fixed points detected")
@@ -105,8 +109,7 @@ def main():
     # Record the selection: a curated topography figure is otherwise impossible
     # to reproduce, since the indices depend on --n and on dynamo's seeding.
     vf["kept_fixed_points"] = list(map(int, args.keep))
-    if args.n is not None:
-        vf["kept_fixed_points_n"] = int(args.n)
+    vf["kept_fixed_points_of"] = int(len(ftype))   # indices are into THIS many points
     kept = [FTYPE_NAME.get(int(t), str(t)) for t in vf["ftype"]]
     info(f"[topography] kept {len(args.keep)} of {len(ftype)}: {args.keep} ({kept})")
 
