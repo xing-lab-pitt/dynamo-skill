@@ -13,6 +13,66 @@ import os
 import sys
 
 
+# ---- pandas >= 2 compatibility ----------------------------------------------
+# dynamo was written against pandas < 2 and turns size-factor Series into column
+# vectors with ``series[:, None]`` in ~130 places (e.g. tools/moments.py:724
+# ``sfs, tot_sfs = sfs[:, None], sfs[:, None]``). pandas 2 rejects that:
+#     ValueError: Multi-dimensional indexing (e.g. `obj[:, None]`) is no longer
+#     supported. Convert to a numpy array before indexing instead.
+# On pandas 2 this makes dynamics() fail outright for metabolic-labeling data,
+# so every script in this toolkit needs the fix — hence applying it here, at
+# import, rather than in each script.
+#
+# Safe by construction: it only intercepts the exact ``[:, None]`` key shape,
+# which raises on pandas 2 today, so no working code path can change meaning.
+# On pandas < 2 nothing is patched. Idempotent.
+
+_NDIM_SHIM_FLAG = "_dynamo_skill_ndim_shim"
+
+
+def _is_ndim_key(key):
+    return (
+        isinstance(key, tuple)
+        and len(key) == 2
+        and isinstance(key[0], slice)
+        and key[1] is None
+    )
+
+
+def apply_pandas_ndim_shim():
+    """Restore pre-2.0 ``series[:, None]`` behaviour. Returns #classes patched."""
+    try:
+        import numpy as np
+        import pandas as pd
+    except ImportError:  # pragma: no cover - pandas/numpy always present with dynamo
+        return 0
+
+    if tuple(int(p) for p in pd.__version__.split(".")[:1]) < (2,):
+        return 0
+
+    n = 0
+    for cls in (pd.Series, pd.Index):
+        if getattr(cls, _NDIM_SHIM_FLAG, False):
+            continue
+        orig = cls.__getitem__
+
+        def _make(orig=orig):
+            def __getitem__(self, key):
+                if _is_ndim_key(key):
+                    return np.asarray(self)[key[0], None]
+                return orig(self, key)
+            return __getitem__
+
+        cls.__getitem__ = _make()
+        setattr(cls, _NDIM_SHIM_FLAG, True)
+        n += 1
+    return n
+
+
+apply_pandas_ndim_shim()
+# -----------------------------------------------------------------------------
+
+
 def info(msg):
     """Print a progress message with a marker."""
     print(f"[dynamo] {msg}", flush=True)

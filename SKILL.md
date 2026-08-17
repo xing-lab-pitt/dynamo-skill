@@ -76,6 +76,7 @@ config, modality detection) — keep it alongside the others and run from the
 | `differential_geometry.py` | Jacobian/acceleration/curvature/divergence + **ranked regulatory-gene CSVs** | `python differential_geometry.py vf.h5ad -o dg.h5ad --basis pca` |
 | `fate.py` | Cell-fate prediction (`dyn.pd.fate`) from init cells + streamline/topography plots | `python fate.py vf.h5ad -o fate.h5ad --init-group cell_type:HSC` |
 | `least_action.py` | Least-action path between two states (`dyn.pd.least_action`) | `python least_action.py vf.h5ad -o lap.h5ad --init-group cell_type:HSC --target-group cell_type:Meg` |
+| `lap_matrix.py` | **Action matrix over ALL ordered pairs** of states + forward-vs-reverse table: which conversions are hard | `python lap_matrix.py vf_pca.h5ad -o lap.h5ad --group-col cell_type --source HSC --targets Meg Ery` |
 | `perturbation.py` | In-silico perturbation / KO (`dyn.pd.perturbation`/`KO`) + ranked response | `python perturbation.py dg.h5ad -o pert.h5ad --genes GATA1 --expression 100` |
 | `plot.py` | Any standard figure: streamline/topography/phase/umap/kinetic_heatmap/scalar-field | `python plot.py vf.h5ad --kind streamline --color cell_type` |
 
@@ -104,6 +105,7 @@ python vector_field.py         red.h5ad -o vf.h5ad  --basis umap --map-topograph
 python differential_geometry.py vf.h5ad -o dg.h5ad  --basis pca --genes GATA1 KLF1
 python fate.py                  vf.h5ad -o fate.h5ad --init-group cell_type:HSC
 python least_action.py          vf.h5ad -o lap.h5ad  --init-group cell_type:HSC --target-group cell_type:Meg
+python lap_matrix.py            vf.h5ad -o lapm.h5ad --basis pca --group-col cell_type --source HSC
 python perturbation.py          dg.h5ad -o pert.h5ad --genes GATA1 --ko
 ```
 

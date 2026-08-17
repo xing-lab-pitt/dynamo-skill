@@ -38,6 +38,35 @@ python least_action.py vf_pca.h5ad -o lap.h5ad \
 
 ---
 
+## 2b. Action matrix across states — `lap_matrix.py`
+One LAP is a route; the **matrix of actions over every ordered pair** is the
+comparison that makes LAP interpretable — it ranks how hard each conversion is.
+In Qiu et al. (Cell 2022) this is the Fig. 7 result: developmental transitions
+cost less action than de-differentiation or transdifferentiation.
+
+```bash
+python lap_matrix.py vf_pca.h5ad -o lap.h5ad --basis pca \
+    --group-col cell_type --source HSC --targets Meg Ery Bas Mon Neu \
+    --out-dir results/lap
+```
+- Outputs `lap_action_matrix.csv` / `.png` (rows = source, cols = target) and,
+  when `--source` is given, `lap_forward_vs_reverse.csv` +
+  `lap_action_barplot.png` with a `ratio_reverse_over_forward` column. A ratio
+  near 1 means that state is **not** acting as an attractor — worth checking
+  against `divergence` before trusting it.
+- **Endpoints are the cell closest to each group's centroid** (`--endpoint
+  centroid`, default), not the first N cells, so the matrix does not depend on
+  row order. `--endpoint first` restores `least_action.py`'s behaviour.
+- **Cost grows quadratically**: N groups = N·(N−1) optimizations, each a few
+  minutes on a few thousand cells. 6 groups (30 pairs) takes hours — start with
+  3–4 groups, or a `--source` plus a couple of `--targets`.
+- A failing pair is recorded and skipped rather than aborting the matrix; check
+  the log for `FAILED` lines before reading the result as complete.
+- Low-n groups are flagged (`--min-cells`, default 50) — a terminal state with a
+  handful of cells gives a weakly constrained path.
+
+---
+
 ## 3. In-silico perturbation / knockout — `perturbation.py`
 Predict how activating, suppressing, or knocking out gene(s) reshapes the flow —
 the effect propagates through the Jacobian.
@@ -73,4 +102,5 @@ python perturbation.py dg.h5ad -o ko.h5ad   --genes GATA1 --ko
 |----------|-------------|-----|
 | fate | umap | trajectories drawn on the embedding |
 | LAP | pca | action defined in high-dim state space |
+| LAP action matrix | pca | same — actions are only comparable within one basis |
 | perturbation / KO | pca (+ umap embedding) | Jacobian propagation in PCA, view in umap |
