@@ -7,20 +7,6 @@ metadata:
   dynamo-version: "1.5.3"
 ---
 
-> **THIS MACHINE (xing lab cluster) — local activation note (not from upstream).**
-> Activate the shared venv before running any script here:
-> ```
-> source /net/capricorn/home/xing/lul176/mskcc/blood_combined/.venv/bin/activate
-> ```
-> Uses the already-present **dynamo 1.5.3** (imports as `import dynamo as dyn`;
-> anndata/scanpy also present — no extra install).
-> The `scripts/` here import a local `_common`, so run them from this skill's
-> `scripts/` dir (e.g. `python run_pipeline.py raw.h5ad -o vf.h5ad`).
-> Upstream of this skill: get an `.h5ad` with the right layers first — **spliced/
-> unspliced** for splicing velocity, or **new/total** for labeling velocity (see
-> the **scanpy** / **scrnaseq-fetch-process** skills for acquisition). This skill
-> is the **vector-field analysis** stage.
-
 # Dynamo: Vector-Field scRNA-seq Analysis
 
 ## Overview
