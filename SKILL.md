@@ -39,6 +39,55 @@ Everything is `anndata.AnnData`-centric (like scanpy):
 For QC, clustering, and marker genes, use **scanpy** first; for probabilistic
 integration models, use **scvi-tools**.
 
+## ⚠ Before you run: confirm the dataset's parameters with the user
+
+**These scripts' defaults are sensible, not universal.** Velocity and
+preprocessing choices are dataset-specific, and a wrong one does not error — it
+produces a plausible-looking vector field pointing the **wrong way**, which then
+silently corrupts every downstream figure, LAP and Jacobian.
+
+Before running `run_pipeline.py` (or `preprocess.py` → `dynamics.py`) on
+unfamiliar data, **ask the user, or check the paper / tutorial / methods section,
+for**:
+
+| Question | Why it matters |
+|---|---|
+| Which **genes**? An author-curated list, or select HVGs? | The paper's list is often forced (`force_gene_list`); HVG selection gives a different field |
+| Splicing or labeling **velocity**, if the object has both? | Objects with spliced/unspliced *and* new/total support either; the choice can invert the field |
+| `--tkey` and `--experiment-type` (`one-shot` / `kin` / `deg` / `mix_std_stm`)? | Wrong experiment type fits the wrong kinetic model |
+| `--model`, `--est-method` (and `one_shot_method`, which has no flag)? | Papers pin these for reproducibility; defaults "give similar results", not identical |
+| `--group`? | Kinetics are often estimated per labeling time or per cell type, not pooled |
+| Reuse the published embedding, or recompute? | A recomputed UMAP will not match the paper's figures |
+
+**Worked example — dynamo's own hematopoiesis data.** Tutorial 301 pins
+`force_gene_list=adata.uns["genes_to_use"]`, sets
+`adata.uns["pp"]["has_splicing"] = False` to force the labeling-only model, and
+uses `group="time", one_shot_method="sci_fate", model="deterministic"`. Running
+this dataset on defaults instead — HVG selection, splicing velocity — yields a
+field flowing from mature monocytes *back into* progenitors.
+
+Some of these (`force_gene_list`, `has_splicing`, `one_shot_method`) are
+deliberately **not** CLI flags, as they are per-dataset rather than general. Set
+them around the scripts when a source requires them:
+
+```python
+import dynamo as dyn
+adata = dyn.read_h5ad("raw.h5ad")
+pp = dyn.pp.Preprocessor(force_gene_list=adata.uns["genes_to_use"])
+pp.config_monocle_recipe(adata, n_top_genes=len(adata.uns["genes_to_use"]))
+pp.preprocess_adata_monocle(adata, tkey="time", experiment_type="one-shot")
+adata.uns["pp"]["has_splicing"] = False          # force the labeling model
+dyn.tl.dynamics(adata, group="time", one_shot_method="sci_fate", model="deterministic")
+adata.write("pp.h5ad")                            # then resume with the scripts
+```
+
+**Reproducing a published figure?** Prefer the processed object
+(`sample_data.py --dataset hematopoiesis`) over re-deriving it. It ships the
+paper's embedding, velocity, vector field and Jacobians, so the field cannot
+disagree with the publication. Re-derive only when the derivation itself is the
+question — and then verify the flow direction against known biology before
+trusting anything downstream.
+
 ## Script Toolkit (prefer these over writing code from scratch)
 
 This skill bundles ready-to-run CLI scripts in `scripts/` for every stage. **Run
@@ -137,8 +186,14 @@ perturbation (run `vector_field.py --basis pca` for those). See
 
 ## Common Pitfalls and Best Practices
 
+0. **Confirm dataset-specific parameters before running** — see the warning
+   section above. A wrong gene list or modality choice inverts the field silently.
+   **Always sanity-check the streamline direction against known biology before
+   reading anything downstream**; progenitors should flow toward mature states.
 1. **Right layers first**: splicing needs spliced/unspliced; labeling needs
-   new/total. `inspect_data.py` reports the detected modality — check it.
+   new/total. `inspect_data.py` reports the detected modality — check it. An
+   object carrying **both** supports either velocity, and the two can disagree;
+   the source, not the default, decides which is right.
 2. **Labeling needs `--tkey`**: without a labeling time, dynamo can't fit the
    kinetic model and falls back to steady state.
 3. **PCA field for differential geometry / perturbation**: the Jacobian and
