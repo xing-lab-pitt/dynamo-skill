@@ -42,6 +42,26 @@ the figure so the ordering is stated, not eyeballed.
 `lap_paths`, several scalars). Without `--out-name` they all save to
 `<kind>.png` and overwrite each other.
 
+**`--compute-basis` — the usual differential-geometry gotcha.** Scalars are
+computed in `pca` but you want to see them on `umap`. `dyn.pl.speed`,
+`divergence`, `acceleration` and `curvature` use one `basis` for *both* the obs
+key and the embedding, so `--kind speed --basis umap` looks for `speed_umap` and
+raises `speed_umap is not existed in .obs`. Say where it was computed:
+
+```bash
+python differential_geometry.py vf.h5ad -o dg.h5ad --basis pca --quantities speed
+python plot.py dg.h5ad --kind speed --basis umap --compute-basis pca   # correct
+```
+
+When the two differ, the scalar is painted on the requested embedding via
+`dyn.pl.scatters`. `--kind jacobian` passes it as dynamo's own `j_basis`, which
+already separates the two.
+
+**`--kind jacobian_heatmap` draws one panel per cell.** Left unbounded that is
+thousands of panels. The default here is the population-averaged matrix
+(`average=True` over all cells); pass `--cell-idx 0 1 2` for specific cells, and
+add `--average` to average just those.
+
 ## Common direct calls (beyond plot.py)
 ```python
 dyn.pl.streamline_plot(adata, basis="umap", color="cell_type", save_show_or_return="return")

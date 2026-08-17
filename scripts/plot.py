@@ -122,11 +122,21 @@ def main():
                    choices=["streamline", "topography", "phase", "umap",
                             "kinetic_heatmap", "jacobian_heatmap",
                             "scalar_by_group", "lap_paths"] + sorted(SCALAR_FIELDS))
-    p.add_argument("--basis", default="umap", help="Embedding basis (default: umap)")
+    p.add_argument("--basis", default="umap", help="Embedding basis to draw on (default: umap)")
+    p.add_argument("--compute-basis", default=None,
+                   help="Basis the scalar/Jacobian was COMPUTED in, when it differs "
+                        "from the embedding (differential geometry is normally run in "
+                        "pca and viewed on umap). Default: same as --basis.")
     p.add_argument("--color", nargs="+", default=None, help="obs/var key(s) to color by")
     p.add_argument("--genes", nargs="+", default=None,
                    help="Genes (phase / kinetic_heatmap; regulators+effectors for "
                         "jacobian / jacobian_heatmap)")
+    p.add_argument("--cell-idx", nargs="+", type=int, default=None,
+                   help="Numeric cell indices for --kind jacobian_heatmap. Default: "
+                        "average over all cells (one matrix) — without this it draws "
+                        "one panel per cell.")
+    p.add_argument("--average", action="store_true",
+                   help="Average the Jacobian over the selected --cell-idx cells")
     p.add_argument("--scalar", default=None,
                    help="obs key holding the per-cell scalar (--kind scalar_by_group)")
     p.add_argument("--group", default=None,
@@ -167,7 +177,16 @@ def main():
     elif k == "jacobian_heatmap":
         if not args.genes:
             die("--kind jacobian_heatmap needs --genes (regulators/effectors)")
-        dyn.pl.jacobian_heatmap(adata, cell_idx=list(range(adata.n_obs)),
+        # dyn.pl.jacobian_heatmap draws ONE PANEL PER CELL unless average=True, so
+        # passing a whole dataset silently asks for thousands of panels. Default to
+        # the population-averaged matrix; --cell-idx opts into specific cells.
+        if args.cell_idx:
+            cells, average = list(args.cell_idx), args.average
+        else:
+            cells, average = list(range(adata.n_obs)), True
+            info(f"[plot] averaging the Jacobian over all {adata.n_obs} cells "
+                 "(pass --cell-idx for per-cell panels)")
+        dyn.pl.jacobian_heatmap(adata, cell_idx=cells, average=average,
                                 regulators=args.genes, effectors=args.genes,
                                 basis=args.basis, save_show_or_return="return")
     elif k == "scalar_by_group":
@@ -187,13 +206,30 @@ def main():
             die("--kind lap_paths needs --paths and --pairs/--pairs-file")
         plot_lap_paths(dyn, adata, args.paths, pairs, args.basis, args.color)
     elif k in SCALAR_FIELDS:
-        # jacobian is per regulator->effector pair, so it takes --genes; the other
-        # scalar fields are per-cell and take none.
-        if k == "jacobian" and args.genes:
+        cbasis = args.compute_basis or args.basis
+        if k == "jacobian":
+            # dyn.pl.jacobian already separates the embedding (basis) from where the
+            # Jacobian was computed (j_basis), and needs --genes for a named pair.
+            if not args.genes:
+                die("--kind jacobian needs --genes (regulators/effectors)")
             dyn.pl.jacobian(adata, regulators=args.genes, effectors=args.genes,
-                            basis=args.basis, save_show_or_return="return")
-        else:
+                            basis=args.basis, j_basis=cbasis,
+                            save_show_or_return="return")
+        elif cbasis == args.basis:
             getattr(dyn.pl, k)(adata, basis=args.basis, save_show_or_return="return")
+        else:
+            # dyn.pl.speed/divergence/acceleration/curvature use one `basis` for BOTH
+            # the obs key and the embedding, so they cannot show a pca-computed scalar
+            # on a umap embedding — the normal case, since differential geometry is
+            # run in pca. Paint the scalar on the requested embedding instead.
+            key = f"{k}_{cbasis}"
+            if key not in adata.obs.columns:
+                die(f"obs['{key}'] not found — run differential_geometry.py "
+                    f"--basis {cbasis} --quantities {k} first")
+            info(f"[plot] {k} computed in '{cbasis}', drawn on '{args.basis}' "
+                 f"(coloring by obs['{key}'])")
+            dyn.pl.scatters(adata, basis=args.basis, color=key, frontier=True,
+                            save_show_or_return="return")
     else:  # unreachable given choices=, but explicit
         die(f"unsupported kind: {k}")
 
