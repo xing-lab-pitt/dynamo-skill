@@ -39,22 +39,7 @@ import numpy as np
 import pandas as pd
 
 from _common import (add_io_args, configure_dynamo, die, info, load_adata,
-                     save_adata, save_fig)
-
-
-def representative_cell(adata, col, group, basis, how):
-    """One cell name standing in for a group (centroid-closest, or first)."""
-    mask = (adata.obs[col].astype(str) == group).values
-    if not mask.sum():
-        return None
-    names = adata.obs_names[mask]
-    if how == "first":
-        return names[0]
-    key = f"X_{basis}"
-    if key not in adata.obsm:
-        die(f"obsm['{key}'] missing — needed for centroid endpoint selection")
-    X = np.asarray(adata.obsm[key])[mask]
-    return names[int(np.argmin(np.linalg.norm(X - X.mean(0), axis=1)))]
+                     representative_cell, save_adata, save_fig)
 
 
 def pick_adj_key(adata, explicit=None):

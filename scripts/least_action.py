@@ -7,6 +7,12 @@ Select start and target cells by explicit names or by obs group
 ('column:value'). LAP is usually run in the PCA basis, so build the field with
 `vector_field.py --basis pca` beforehand.
 
+A group has to collapse to a single endpoint (LAP solves one path per init
+cell). --endpoint controls how: `centroid` (default) takes the cell closest to
+the group's centroid in the field's basis; `first` takes the first cell in row
+order, which is what this script did before --endpoint existed. lap_matrix.py
+uses the same helper, so both scripts pick the same cell for a given group.
+
 Examples:
     python least_action.py vf.h5ad -o lap.h5ad \\
         --init-group cell_type:HSC --target-group cell_type:Meg --basis pca
@@ -16,7 +22,8 @@ Examples:
 
 import argparse
 
-from _common import add_io_args, configure_dynamo, info, load_adata, save_adata, save_fig, select_cells
+from _common import (add_io_args, configure_dynamo, info, load_adata,
+                     representative_cell, save_adata, save_fig, select_cells)
 
 
 def main():
@@ -32,7 +39,11 @@ def main():
     p.add_argument("--n-cells", type=int, default=1,
                    help="Representative init/target cells to use (default: 1). LAP solves "
                         "one path per init cell, so a whole population is intractable; this "
-                        "caps each endpoint to the first N selected cells.")
+                        "caps each endpoint to N cells chosen per --endpoint.")
+    p.add_argument("--endpoint", choices=["centroid", "first"], default="centroid",
+                   help="How to collapse a --*-group to representative cell(s): "
+                        "centroid-closest (default) or first in row order. Ignored for "
+                        "explicit --init-cells/--target-cells.")
     args = p.parse_args()
 
     dyn = configure_dynamo(figdir=args.figdir)
@@ -40,13 +51,24 @@ def main():
     init_cells = select_cells(adata, args.init_cells, args.init_group, role="init")
     target_cells = select_cells(adata, args.target_cells, args.target_group, role="target")
 
-    # LAP is a per-init-cell optimization — cap endpoints to a few representative cells.
-    if args.n_cells and len(init_cells) > args.n_cells:
-        info(f"[least_action] capping init cells {len(init_cells)} -> {args.n_cells} (--n-cells)")
-        init_cells = init_cells[: args.n_cells]
-    if args.n_cells and len(target_cells) > args.n_cells:
-        info(f"[least_action] capping target cells {len(target_cells)} -> {args.n_cells} (--n-cells)")
-        target_cells = target_cells[: args.n_cells]
+    # LAP is a per-init-cell optimization — collapse each group endpoint to n_cells.
+    # With --endpoint centroid and n_cells 1 (the defaults) that is the group's
+    # centroid-closest cell, matching lap_matrix.py. Explicit --*-cells are left alone.
+    def _collapse(cells, group, role):
+        if args.n_cells and len(cells) > args.n_cells:
+            if group and args.endpoint == "centroid" and args.n_cells == 1:
+                col, val = group.split(":", 1)
+                rep = representative_cell(adata, col, val, basis=args.basis,
+                                          how=args.endpoint)
+                info(f"[least_action] {role} {len(cells)} cells -> centroid cell {rep}")
+                return [rep]
+            info(f"[least_action] capping {role} cells {len(cells)} -> {args.n_cells} "
+                 f"(--n-cells, --endpoint {args.endpoint})")
+            return cells[: args.n_cells]
+        return cells
+
+    init_cells = _collapse(init_cells, args.init_group, "init")
+    target_cells = _collapse(target_cells, args.target_group, "target")
 
     info(f"[least_action] basis={args.basis}  n_points={args.n_points}")
     dyn.pd.least_action(

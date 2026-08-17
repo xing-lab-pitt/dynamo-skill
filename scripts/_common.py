@@ -215,6 +215,32 @@ def select_cells(adata, explicit=None, group=None, role="init"):
     die(f"provide --{role}-cells or --{role}-group")
 
 
+def representative_cell(adata, col, group, basis="pca", how="centroid"):
+    """One cell name standing in for a group: centroid-closest, or first.
+
+    Used wherever a whole group must collapse to a single endpoint — LAP solves
+    one path per init cell, so a whole population is intractable. "first"
+    depends on row order, which turns an arbitrary ordering into apparent
+    signal, so "centroid" is the default. least_action.py and lap_matrix.py both
+    call this, so their endpoints agree by construction.
+
+    Returns None when the group is absent; callers decide whether that is fatal.
+    """
+    import numpy as np
+
+    mask = (adata.obs[col].astype(str) == group).values
+    if not mask.sum():
+        return None
+    names = adata.obs_names[mask]
+    if how == "first":
+        return names[0]
+    key = f"X_{basis}"
+    if key not in adata.obsm:
+        die(f"obsm['{key}'] missing — needed for centroid endpoint selection")
+    X = np.asarray(adata.obsm[key])[mask]
+    return names[int(np.argmin(np.linalg.norm(X - X.mean(0), axis=1)))]
+
+
 def has_vectorfield(adata, basis=None):
     """Whether a reconstructed vector field is present (optionally for a basis)."""
     key = "VecFld" if basis is None else f"VecFld_{basis}"
