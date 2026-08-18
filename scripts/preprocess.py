@@ -34,8 +34,14 @@ def main():
                    help="Preprocessing recipe (default: monocle)")
     p.add_argument("--modality", default="auto", choices=["auto", "splicing", "labeling"],
                    help="Data modality (default: auto-detect from layers)")
-    p.add_argument("--n-top-genes", type=int, default=2000,
-                   help="Number of feature genes to select (default: 2000)")
+    p.add_argument("--n-top-genes", type=int, default=None,
+                   help="Number of feature genes to select (default: 2000, or the "
+                        "length of --force-gene-list* when one is given)")
+    p.add_argument("--force-gene-list", default=None,
+                   help="File with one gene per line to use INSTEAD of gene selection "
+                        "(papers usually pin an author-curated list)")
+    p.add_argument("--force-gene-list-uns", default=None,
+                   help="uns key holding that gene list, e.g. genes_to_use")
     p.add_argument("--tkey", default=None,
                    help="obs column with labeling time (labeling data only)")
     p.add_argument("--experiment-type", default=None,
@@ -53,17 +59,37 @@ def main():
         info("WARNING: labeling data usually needs --tkey (labeling time in obs); "
              "continuing without it.")
 
-    preprocessor = dyn.pp.Preprocessor(cell_cycle_score_enable=not args.no_cell_cycle)
+    if args.force_gene_list and args.force_gene_list_uns:
+        p.error("use --force-gene-list or --force-gene-list-uns, not both")
+    force_genes = None
+    if args.force_gene_list:
+        with open(args.force_gene_list) as fh:
+            force_genes = [ln.strip() for ln in fh if ln.strip()]
+    elif args.force_gene_list_uns:
+        if args.force_gene_list_uns not in adata.uns:
+            p.error(f"uns['{args.force_gene_list_uns}'] not found; "
+                    f"available: {sorted(adata.uns)}")
+        force_genes = list(adata.uns[args.force_gene_list_uns])
+
+    # A forced list replaces gene selection, so it also sets how many genes to keep.
+    n_top_genes = args.n_top_genes
+    if n_top_genes is None:
+        n_top_genes = len(force_genes) if force_genes else 2000
+
+    kwargs = {"force_gene_list": force_genes} if force_genes else {}
+    preprocessor = dyn.pp.Preprocessor(cell_cycle_score_enable=not args.no_cell_cycle,
+                                       **kwargs)
 
     # Tune the feature-gene count for whichever recipe is selected.
     if args.recipe == "monocle":
-        preprocessor.config_monocle_recipe(adata, n_top_genes=args.n_top_genes)
+        preprocessor.config_monocle_recipe(adata, n_top_genes=n_top_genes)
     else:
         # Other recipes read n_top_genes from their select_genes kwargs.
-        preprocessor.select_genes_kwargs["n_top_genes"] = args.n_top_genes
+        preprocessor.select_genes_kwargs["n_top_genes"] = n_top_genes
 
     info(f"[preprocess] recipe={args.recipe}  modality={modality}  "
-         f"n_top_genes={args.n_top_genes}")
+         f"n_top_genes={n_top_genes}"
+         + (f"  force_gene_list={len(force_genes)} genes" if force_genes else ""))
     preprocessor.preprocess_adata(
         adata,
         recipe=args.recipe,
