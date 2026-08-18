@@ -21,7 +21,8 @@ Examples:
 
 import argparse
 
-from _common import add_io_args, configure_dynamo, info, load_adata, resolve_modality, save_adata
+from _common import (add_io_args, configure_dynamo, info, load_adata, resolve_modality,
+                     save_adata, symbol_converter)
 
 
 def main():
@@ -42,6 +43,11 @@ def main():
                         "(papers usually pin an author-curated list)")
     p.add_argument("--force-gene-list-uns", default=None,
                    help="uns key holding that gene list, e.g. genes_to_use")
+    p.add_argument("--ensembl-release", type=int, default=None,
+                   help="Ensembl release used to turn Ensembl IDs into gene symbols. "
+                        "dynamo's own default is 77 (2014), whose symbols predate "
+                        "current HGNC names; pin a release so the vintage is explicit "
+                        "and matches whatever gene list you compare against")
     p.add_argument("--tkey", default=None,
                    help="obs column with labeling time (labeling data only)")
     p.add_argument("--experiment-type", default=None,
@@ -77,6 +83,8 @@ def main():
         n_top_genes = len(force_genes) if force_genes else 2000
 
     kwargs = {"force_gene_list": force_genes} if force_genes else {}
+    if args.ensembl_release is not None:
+        kwargs["convert_gene_name_function"] = symbol_converter(args.ensembl_release)
     preprocessor = dyn.pp.Preprocessor(cell_cycle_score_enable=not args.no_cell_cycle,
                                        **kwargs)
 

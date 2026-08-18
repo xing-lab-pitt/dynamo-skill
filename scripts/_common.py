@@ -154,6 +154,39 @@ def save_adata(adata, path):
 
 # ---- dynamo-specific helpers -------------------------------------------------
 
+
+def symbol_converter(ensembl_release):
+    """Return a convert_gene_name_function pinned to one Ensembl release.
+
+    dynamo turns Ensembl IDs into gene symbols offline, via
+    ``convert2gene_symbol(..., ensembl_release=None)``. Its own docstring says
+    that default is release 109, but the code sets **77** (October 2014), and
+    convert2symbol -- the function the Preprocessor actually calls -- has no
+    parameter to override it. So the symbol vintage is silently a decade old and
+    unreachable, which matters whenever gene names are matched as strings: a
+    2022 curated list asks for SEPTIN3 / FYB1 / ATP5F1D, release 77 answers
+    SEPT3 / FYB / ATP5D, and those genes drop out.
+
+    Passing a release makes the vintage explicit and reproducible. The database
+    is downloaded and indexed once (minutes), then cached in ~/.cache/pyensembl.
+    """
+    import functools
+
+    from dynamo.preprocessing import utils as _dyn_pp_utils
+
+    def convert(adata, scopes=None, subset=True):
+        original = _dyn_pp_utils.convert2gene_symbol
+        # convert2symbol resolves this name at call time from its own module.
+        _dyn_pp_utils.convert2gene_symbol = functools.partial(
+            original, ensembl_release=ensembl_release)
+        try:
+            return _dyn_pp_utils.convert2symbol(adata, scopes, subset)
+        finally:
+            _dyn_pp_utils.convert2gene_symbol = original
+
+    return convert
+
+
 # Layers that identify each data modality. Splicing-based velocity needs
 # spliced/unspliced counts; metabolic-labeling velocity needs new (labeled) and
 # total counts (scNT-seq, scEU-seq, scSLAM-seq, ...).

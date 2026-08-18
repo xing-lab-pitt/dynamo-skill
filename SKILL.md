@@ -58,6 +58,17 @@ for**:
 | `--model`, `--est-method` (and `one_shot_method`, which has no flag)? | Papers pin these for reproducibility; defaults "give similar results", not identical |
 | `--group`? | Kinetics are often estimated per labeling time or per cell type, not pooled |
 | Reuse the published embedding, or recompute? | A recomputed UMAP will not match the paper's figures |
+| If `var_names` are Ensembl IDs, which **annotation release** names them? | dynamo names IDs offline from **Ensembl 77 (2014)**, so a modern curated list silently loses every gene renamed since — pin `--ensembl-release` |
+
+**Gene-symbol vintage.** When `var_names` are Ensembl IDs, `Preprocessor` converts
+them to symbols before anything can match a gene list by name. dynamo 1.5.3 does
+that against Ensembl release 77 (its docstring says 109, the code says 77), giving
+SEPT3, FYB, ATP5D where current HGNC says SEPTIN3, FYB1, ATP5F1D. Matching a
+2022-era list against those names dropped 323 of 1956 genes on the hematopoiesis
+data — no error, just a quietly smaller gene set. `preprocess.py --ensembl-release`
+makes the vintage explicit; the database is downloaded and indexed once (minutes,
+~1.6 GB) into `~/.cache/pyensembl`. Match the release to the list you compare
+against, and record which one you used.
 
 **Worked example — dynamo's own hematopoiesis data.** Tutorial 301 pins
 `force_gene_list=adata.uns["genes_to_use"]`, sets
