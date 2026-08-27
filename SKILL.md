@@ -56,7 +56,7 @@ for**:
 | Splicing or labeling **velocity**, if the object has both? | Objects with spliced/unspliced *and* new/total support either; the choice can invert the field |
 | `--tkey` and `--experiment-type` (`one-shot` / `kin` / `deg` / `mix_std_stm`)? | Wrong experiment type fits the wrong kinetic model |
 | `--model`, `--est-method` (and `one_shot_method`, which has no flag)? | Papers pin these for reproducibility; defaults "give similar results", not identical |
-| `--group`? | Kinetics are often estimated per labeling time or per cell type, not pooled. On an input that is already smoothed this also needs `--re-smooth` — see below |
+| `--group` — and is it the **cell type** or the **collection timepoint**? | Kinetics are often estimated per group rather than pooled, but the two choices answer different questions and you only get one column. On an already-smoothed input this also needs `--re-smooth` — both below |
 | Reuse the published embedding, or recompute? | A recomputed UMAP will not match the paper's figures |
 | If `var_names` are Ensembl IDs, which **annotation release** names them? | dynamo names IDs offline from **Ensembl 77 (2014)**, so a modern curated list silently loses every gene renamed since — pin `--ensembl-release` |
 
@@ -69,6 +69,21 @@ data — no error, just a quietly smaller gene set. `preprocess.py --ensembl-rel
 makes the vintage explicit; the database is downloaded and indexed once (minutes,
 ~1.6 GB) into `~/.cache/pyensembl`. Match the release to the list you compare
 against, and record which one you used.
+
+**`--group`: cell type or collection timepoint?** `dyn.tl.dynamics` takes a single
+column, and the two natural choices answer different questions:
+
+| `--group` is… | What you get | Reach for it when |
+|---|---|---|
+| a **cell type** column | Kinetic rates fitted separately per cell type — "do progenitors and neutrophils turn RNA over at different speeds?" | Rates are the result you are after, and all cells were collected together |
+| a **collection timepoint** column | Each timepoint's cells smoothed only against their own timepoint, so collection times cannot bleed into one another | Cells were harvested at several times and you do not want that structure averaged away before the analysis starts |
+
+You cannot have both from one column. Building a joint `timepoint_celltype` column
+works in principle but multiplies the group count, and dynamo warns below 50 cells
+per group because such groups can return all-NaN velocities, asking you to
+coarse-grain instead — so the joint column can push groups under that floor. `dynamics.py` prints the
+per-group counts before it runs, which is the number to look at before committing
+to a grouping.
 
 **`--group` on an already-smoothed object needs `--re-smooth`.** Smoothing replaces
 each cell's value with a kNN average, and neighbours are picked by expression

@@ -35,7 +35,10 @@ def main():
     p.add_argument("--tkey", default=None,
                    help="obs column with labeling time (enables the kinetic model)")
     p.add_argument("--group", default=None,
-                   help="obs column to estimate group-wise kinetics (e.g. cell type)")
+                   help="obs column to estimate kinetics per group. A cell-type column "
+                        "gives cell-type-specific rates; a collection-timepoint column "
+                        "instead keeps timepoints out of each other's kNN averages. "
+                        "Only one column, so pick the question you are asking.")
     p.add_argument("--re-smooth", action="store_true",
                    help="Rebuild the smoothed M_* layers. Required with --group when "
                         "the input was already smoothed, or dynamo ignores --group.")

@@ -47,7 +47,9 @@ def build_parser():
     p.add_argument("--model", default="auto", choices=["auto", "deterministic", "stochastic"])
     p.add_argument("--est-method", default="auto",
                    choices=["auto", "ols", "rlm", "ransac", "gmm", "negbin", "twostep", "direct"])
-    p.add_argument("--group", default=None)
+    p.add_argument("--group", default=None,
+                   help="obs column for per-group kinetics: a cell type, or the "
+                        "collection timepoint to keep timepoints from mixing")
     p.add_argument("--re-smooth", action="store_true",
                    help="Rebuild the smoothed M_* layers; needed with --group on an "
                         "input that was already smoothed")
