@@ -7,3 +7,6 @@ figures/
 results/
 data/
 *.h5ad
+
+# Maintainer-local repo guide (paths point at this machine only)
+CLAUDE.md
