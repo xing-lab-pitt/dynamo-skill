@@ -60,6 +60,17 @@ python perturbation.py          dg.h5ad  -o pert.h5ad --genes GATA1 --ko
 Every script has `--help`. Scripts import the shared `scripts/_common.py`, so run
 them from the `scripts/` directory; figures default to `./figures/`.
 
+## A note on parameters
+
+Velocity and preprocessing choices are dataset-specific, and a wrong one usually
+does not raise — it yields a plausible field pointing the wrong way, which then
+corrupts every figure, least-action path and Jacobian downstream. `SKILL.md`
+carries a checklist of what to confirm before a run. One case is enforced in code:
+estimating kinetics per group (`--group`, e.g. per cell type or collection
+timepoint) also needs `--re-smooth` when the input was already smoothed, because
+dynamo would otherwise accept `--group` and quietly keep the pooled averages. The
+scripts refuse that combination rather than proceeding.
+
 ## Layout
 
 ```

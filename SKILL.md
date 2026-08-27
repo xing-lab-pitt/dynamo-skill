@@ -56,7 +56,7 @@ for**:
 | Splicing or labeling **velocity**, if the object has both? | Objects with spliced/unspliced *and* new/total support either; the choice can invert the field |
 | `--tkey` and `--experiment-type` (`one-shot` / `kin` / `deg` / `mix_std_stm`)? | Wrong experiment type fits the wrong kinetic model |
 | `--model`, `--est-method` (and `one_shot_method`, which has no flag)? | Papers pin these for reproducibility; defaults "give similar results", not identical |
-| `--group`? | Kinetics are often estimated per labeling time or per cell type, not pooled |
+| `--group`? | Kinetics are often estimated per labeling time or per cell type, not pooled. On an input that is already smoothed this also needs `--re-smooth` — see below |
 | Reuse the published embedding, or recompute? | A recomputed UMAP will not match the paper's figures |
 | If `var_names` are Ensembl IDs, which **annotation release** names them? | dynamo names IDs offline from **Ensembl 77 (2014)**, so a modern curated list silently loses every gene renamed since — pin `--ensembl-release` |
 
@@ -69,6 +69,26 @@ data — no error, just a quietly smaller gene set. `preprocess.py --ensembl-rel
 makes the vintage explicit; the database is downloaded and indexed once (minutes,
 ~1.6 GB) into `~/.cache/pyensembl`. Match the release to the list you compare
 against, and record which one you used.
+
+**`--group` on an already-smoothed object needs `--re-smooth`.** Smoothing replaces
+each cell's value with a kNN average, and neighbours are picked by expression
+similarity alone. `--group` instead builds one neighbour graph per group, which is
+how cells from different collection timepoints are kept out of each other's
+averages. But `dyn.tl.dynamics` rebuilds those `M_*` layers only when fewer than
+two exist or `re_smooth=True`, so on an input that already carries them — a
+published object (`sample_data.hematopoiesis` ships five), anything a
+`recipe_*_data` produced, or a second `dynamics` run — `--group` is accepted and
+then ignored, leaving a warning in the log and pooled averages under every later
+number. `dynamics.py` and `run_pipeline.py` now refuse that combination and name
+the fix, and print the per-group cell counts, flagging groups under 50 cells where
+dynamo can return NaN velocities:
+
+```bash
+python dynamics.py hsc.h5ad -o dyn.h5ad --group time --re-smooth
+```
+
+A fresh `preprocess.py` → `dynamics.py` chain is unaffected: preprocessing writes
+no `M_*` layers, so `dynamics` builds them respecting `--group` on the first run.
 
 **Worked example — dynamo's own hematopoiesis data.** Tutorial 301 pins
 `force_gene_list=adata.uns["genes_to_use"]`, sets
@@ -117,7 +137,7 @@ config, modality detection) — keep it alongside the others and run from the
 | `run_pipeline.py` | **Full core workflow in one command**: load → preprocess → dynamics → reduceDimension → cell_velocities → VectorField (+ optional diff-geometry) | `python run_pipeline.py raw.h5ad -o vf.h5ad` |
 | `inspect_data.py` | Summarize a dataset: shape, **detected modality**, layers, and which dynamo steps already ran | `python inspect_data.py data.h5ad` |
 | `preprocess.py` | QC + gene selection + normalize + PCA via `dyn.pp.Preprocessor` (recipe-based; handles labeling with `--tkey`) | `python preprocess.py raw.h5ad -o pp.h5ad` |
-| `dynamics.py` | Kinetics + RNA velocity (`dyn.tl.dynamics`); `--tkey` enables the labeling kinetic model | `python dynamics.py pp.h5ad -o dyn.h5ad --model stochastic` |
+| `dynamics.py` | Kinetics + RNA velocity (`dyn.tl.dynamics`); `--tkey` enables the labeling kinetic model; `--group` estimates per group and needs `--re-smooth` on an already-smoothed input | `python dynamics.py pp.h5ad -o dyn.h5ad --model stochastic` |
 | `reduce_dimensions.py` | Embedding (`reduceDimension`) + project velocity onto it (`cell_velocities`) | `python reduce_dimensions.py dyn.h5ad -o red.h5ad` |
 | `vector_field.py` | Reconstruct the continuous field (`dyn.vf.VectorField`); `--map-topography` for fixed points | `python vector_field.py red.h5ad -o vf.h5ad --basis umap` |
 | `topography.py` | **Inspect and curate fixed points**: `--list` what was detected, `--keep` the real ones. Raw topography over-detects, so every published figure is curated | `python topography.py vf.h5ad --basis umap --n 750 --list` |
@@ -190,7 +210,9 @@ perturbation (run `vector_field.py --basis pca` for those). See
 - **Preprocess**: `--recipe` (monocle/seurat/sctransform/pearson_residuals),
   `--n-top-genes` (2000–3000).
 - **Dynamics**: `--model` (deterministic/stochastic), `--est-method` (`twostep`
-  for labeling), `--tkey` (labeling time), `--group` (per-cell-type kinetics).
+  for labeling), `--tkey` (labeling time), `--group` (per-group kinetics: cell
+  type or collection timepoint), `--re-smooth` (rebuild the `M_*` layers; required
+  alongside `--group` on an already-smoothed input).
 - **Reduce**: `--reduction` (umap/tsne), `--basis`.
 - **Vector field**: `--basis`, `--map-topography`, `--pot-curl-div`.
 - **Differential geometry**: `--quantities`, `--genes` (Jacobian regulators/effectors).
