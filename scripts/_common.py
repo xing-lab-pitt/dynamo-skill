@@ -227,6 +227,46 @@ def resolve_modality(adata, requested):
     return modality
 
 
+def check_group_smoothing(adata, group, re_smooth):
+    """Refuse a --group run that dynamo would silently downgrade to pooled smoothing.
+
+    Smoothing replaces each cell's value with a kNN average, and neighbours are
+    chosen by expression similarity alone. Passing `group` builds one neighbour
+    graph per group instead, which is how you keep cells from different collection
+    timepoints out of each other's averages.
+
+    The catch is in `dyn.tl.dynamics` (tools/dynamics.py:341-359): it only rebuilds
+    the `M_*` layers when fewer than two exist or `re_smooth=True`. On an input that
+    already carries them -- a published object such as `sample_data.hematopoiesis`
+    (5 `M_` layers), anything a `recipe_*_data` produced, or a second dynamics run --
+    `group` is accepted and then ignored, with only a warning in the log. Every
+    downstream number is then built on averages that mix the groups, so we refuse
+    and name the fix instead.
+    """
+    if group is None:
+        return
+    if group not in adata.obs.columns:
+        die(f"--group '{group}' is not a column in .obs")
+
+    counts = adata.obs[group].value_counts()
+    info(f"[group] {group}: {len(counts)} groups -- " +
+         ", ".join(f"{name}={n}" for name, n in counts.items()))
+
+    # dynamo warns below 50 cells because such groups can yield all-NaN velocities.
+    small = counts[counts < 50]
+    if len(small):
+        info("[group] WARNING: under 50 cells in " +
+             ", ".join(f"{name} ({n})" for name, n in small.items()) +
+             " -- velocities for those cells may come back NaN")
+
+    m_layers = sorted(k for k in _named_layers(adata) if k.startswith("M_"))
+    if len(m_layers) >= 2 and not re_smooth:
+        die(f"--group {group} was requested, but {len(m_layers)} smoothed layers "
+            f"({', '.join(m_layers)}) already exist. dynamo keeps them and ignores "
+            f"--group, so the groups stay mixed in the kNN average. Re-run with "
+            f"--re-smooth to rebuild the moments per group.")
+
+
 def select_cells(adata, explicit=None, group=None, role="init"):
     """Resolve a set of cell names from an explicit list or an 'obs_col:value' group.
 

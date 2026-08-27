@@ -18,7 +18,8 @@ Examples:
 
 import argparse
 
-from _common import add_io_args, configure_dynamo, info, load_adata, save_adata
+from _common import (add_io_args, check_group_smoothing, configure_dynamo, info,
+                     load_adata, save_adata)
 
 
 def main():
@@ -35,11 +36,15 @@ def main():
                    help="obs column with labeling time (enables the kinetic model)")
     p.add_argument("--group", default=None,
                    help="obs column to estimate group-wise kinetics (e.g. cell type)")
+    p.add_argument("--re-smooth", action="store_true",
+                   help="Rebuild the smoothed M_* layers. Required with --group when "
+                        "the input was already smoothed, or dynamo ignores --group.")
     p.add_argument("--cores", type=int, default=1, help="Parallel cores (default: 1)")
     args = p.parse_args()
 
     dyn = configure_dynamo(figdir=args.figdir)
     adata = load_adata(args.input)
+    check_group_smoothing(adata, args.group, args.re_smooth)
 
     # For labeling kinetics (--tkey) the 'auto' estimator can hit numerical bounds;
     # twostep is dynamo's robust default for scEU/scNT data.
@@ -49,13 +54,14 @@ def main():
         info("[dynamics] labeling kinetics: est_method auto -> twostep")
 
     info(f"[dynamics] model={args.model}  est_method={est_method}  "
-         f"tkey={args.tkey}  group={args.group}")
+         f"tkey={args.tkey}  group={args.group}  re_smooth={args.re_smooth}")
     dyn.tl.dynamics(
         adata,
         model=args.model,
         est_method=est_method,
         tkey=args.tkey,
         group=args.group,
+        re_smooth=args.re_smooth,
         cores=args.cores,
     )
 

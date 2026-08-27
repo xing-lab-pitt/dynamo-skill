@@ -22,7 +22,8 @@ Examples:
 import argparse
 import json
 
-from _common import configure_dynamo, info, load_adata, resolve_modality, save_adata
+from _common import (check_group_smoothing, configure_dynamo, info, load_adata,
+                     resolve_modality, save_adata)
 
 
 def build_parser():
@@ -47,6 +48,9 @@ def build_parser():
     p.add_argument("--est-method", default="auto",
                    choices=["auto", "ols", "rlm", "ransac", "gmm", "negbin", "twostep", "direct"])
     p.add_argument("--group", default=None)
+    p.add_argument("--re-smooth", action="store_true",
+                   help="Rebuild the smoothed M_* layers; needed with --group on an "
+                        "input that was already smoothed")
     p.add_argument("--cores", type=int, default=1)
     # reduction / projection / field
     p.add_argument("--reduction", default="umap", choices=["umap", "tsne", "psl", "sude"])
@@ -91,9 +95,11 @@ def main():
     if args.tkey and est_method == "auto":
         est_method = "twostep"
         info("      labeling kinetics: est_method auto -> twostep")
+    check_group_smoothing(adata, args.group, args.re_smooth)
     info(f"[3/6] Dynamics (model={args.model}, est_method={est_method})")
     dyn.tl.dynamics(adata, model=args.model, est_method=est_method,
-                    tkey=args.tkey, group=args.group, cores=args.cores)
+                    tkey=args.tkey, group=args.group,
+                    re_smooth=args.re_smooth, cores=args.cores)
 
     info(f"[4/6] Dimension reduction ({args.reduction}) + cell velocities (basis={args.basis})")
     dyn.tl.reduceDimension(adata, reduction_method=args.reduction, cores=args.cores)
